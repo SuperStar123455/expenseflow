@@ -239,11 +239,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);bac
           <h3>Google Sheets</h3>
           <p class="sp">Paste your spreadsheet URL to connect and push all expenses.</p>
           <div class="step-row"><div class="step-num">1</div><div class="step-txt">Create a sheet <strong>"ExpenseFlow Tracker"</strong></div></div>
-          <div class="step-row"><div class="step-num">2</div><div class="step-txt">Paste the <strong>Sheet URL</strong> and tap Connect</div></div>
+          <div class="step-row"><div class="step-num">2</div><div class="step-txt">Paste the <strong>Apps Script /exec URL</strong> and tap Connect</div></div>
           <div class="step-row"><div class="step-num">3</div><div class="step-txt">Tap <strong>Sync Now</strong> anytime</div></div>
           <div class="fg" style="margin-top:14px;margin-bottom:10px">
             <label>Google Sheets URL</label>
-            <input type="url" id="sheets-url" placeholder="https://docs.google.com/spreadsheets/d/...">
+            <input type="url" id="sheets-url" placeholder="https://script.google.com/macros/s/.../exec">
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn-p" style="font-size:14px;padding:11px" onclick="connectSheets()">Connect</button>
@@ -653,7 +653,7 @@ function initSheets() {
 }
 function connectSheets() {
   var url=document.getElementById('sheets-url').value.trim();
-  if(!url.includes('docs.google.com/spreadsheets')){ showToast('Enter a valid Sheets URL','!','error'); return; }
+  if(!url.includes('script.google.com/macros') || !url.includes('/exec')){ showToast('Please paste your Apps Script /exec URL','!','error'); return; }
   sheetsConn=true; sheetsUrl=url;
   localStorage.setItem('ef6_sc','true'); localStorage.setItem('ef6_su',url);
   document.getElementById('sheets-status').style.display='flex';
@@ -661,12 +661,33 @@ function connectSheets() {
   showToast('Connected!','✓','success');
 }
 function syncNow() {
-  if(!sheetsConn){ showToast('Connect a Google Sheet first','!','error'); return; }
-  expenses=expenses.map(function(e){return Object.assign({},e,{synced:true});});
-  save(); renderDash();
-  if(curPage==='expenses') renderExpenses();
-  document.getElementById('sheets-txt').textContent='Synced '+expenses.length+' rows at '+new Date().toLocaleTimeString();
-  showToast('Synced '+expenses.length+' expenses','✓','success');
+  if(!sheetsConn){ showToast('Connect Sheets first','!','error'); return; }
+  showToast('Syncing…','⏳','success');
+  document.getElementById('sheets-txt').textContent='Syncing…';
+  fetch(sheetsUrl, {
+    method:'POST',
+    body: JSON.stringify({ expenses: expenses }),
+    headers: { 'Content-Type': 'text/plain' }
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(res){
+    if(res.success){
+      expenses = expenses.map(function(e){ return Object.assign({},e,{synced:true}); });
+      save(); renderDash();
+      if(curPage==='expenses') renderExpenses();
+      var t = new Date().toLocaleTimeString();
+      document.getElementById('sheets-txt').textContent='Synced '+res.count+' rows at '+t;
+      showToast('Synced '+res.count+' expenses to Google Sheets ✓','✓','success');
+    } else {
+      showToast('Sync failed: '+res.error,'!','error');
+      document.getElementById('sheets-txt').textContent='Sync failed — check console';
+    }
+  })
+  .catch(function(err){
+    showToast('Network error — check your URL','!','error');
+    document.getElementById('sheets-txt').textContent='Connection error';
+    console.error('Sync error:',err);
+  });
 }
 function saveDrive() {
   driveFolders['Orin Global']  = document.getElementById('drive-orin').value.trim();
