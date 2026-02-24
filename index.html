@@ -479,7 +479,7 @@ function expCard(e, showActions) {
     actions='<div class="exp-actions"><button class="act-btn edit" onclick="openEdit('+e.id+')">✎ Edit</button><button class="act-btn del" onclick="askDel('+e.id+')">🗑 Delete</button><span class="synced-badge" style="color:'+syncedClr+'">'+syncedTxt+'</span></div>';
   }
   var notes=e.notes?'<div class="exp-notes">'+e.notes+'</div>':'';
-  var rcpt=e.receipt?'<span class="exp-rcpt">📎 '+e.receipt+'</span>':'';
+  var rcpt=e.receipt?(e.receiptUrl?'<a href="'+e.receiptUrl+'" target="_blank" class="exp-rcpt" style="text-decoration:none">📎 '+e.receipt+'</a>':'<span class="exp-rcpt">📎 '+e.receipt+'</span>'):'';
   var paid=e.paid?'<span class="exp-paid">💳 '+e.paid+'</span>':'';
   return '<div class="expense-card">'
     +'<div class="exp-top"><span class="exp-serial">'+e.serial+'</span><span class="exp-amount">'+inr(e.amount)+'</span></div>'
@@ -586,24 +586,75 @@ function saveExp() {
   if(!desc)              { showToast('Please add a description','!','error'); return; }
   if(!amount||amount<=0) { showToast('Please enter a valid amount','!','error'); return; }
   if(paid && paidMethods.indexOf(paid)===-1) { paidMethods.unshift(paid); if(paidMethods.length>40)paidMethods.pop(); savePaid(); }
-  var cat = document.getElementById('m-cat').value;
-  var ent = document.getElementById('m-entity').value;
-  var dt  = document.getElementById('m-date').value;
+  var cat   = document.getElementById('m-cat').value;
+  var ent   = document.getElementById('m-entity').value;
+  var dt    = document.getElementById('m-date').value;
   var notes = document.getElementById('m-notes').value.trim();
+  var serial;
+
   if(editingId) {
     var i=expenses.findIndex(function(e){return e.id===editingId;});
     if(i>=0){
+      serial = expenses[i].serial;
       expenses[i]=Object.assign({},expenses[i],{date:dt,entity:ent,desc:desc,cat:cat,amount:amount,paid:paid,notes:notes,receipt:selFile?selFile.name:expenses[i].receipt,synced:false});
       showToast('Expense updated','✓','success');
     }
   } else {
-    var serial=nextSerial();
+    serial = nextSerial();
     expenses.unshift({id:Date.now(),serial:serial,date:dt,entity:ent,desc:desc,cat:cat,amount:amount,paid:paid,notes:notes,receipt:selFile?selFile.name:null,synced:false});
     showToast(serial+' saved!','✓','success');
   }
+
   save(); closeModal(); populateMonths(); renderDash();
   if(curPage==='expenses') renderExpenses();
   if(curPage==='analytics') renderAnalytics();
+
+  // Upload receipt to Google Drive if a file was selected
+  if(selFile && sheetsConn) {
+    uploadReceipt(selFile, ent, serial);
+  }
+}
+
+// Upload receipt file to Google Drive via Apps Script
+function uploadReceipt(file, entity, serial) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    // Strip base64 header e.g. "data:image/png;base64,"
+    var base64 = e.target.result.split(',')[1];
+    showToast('Uploading receipt…','📎','success');
+    fetch(sheetsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        type:     'receipt',
+        entity:   entity,
+        serial:   serial,
+        fileName: file.name,
+        mimeType: file.type,
+        fileData: base64
+      })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res.success){
+        // Update the expense record with the Drive file URL
+        var idx = expenses.findIndex(function(e){ return e.serial===serial; });
+        if(idx>=0){
+          expenses[idx].receipt    = res.fileName;
+          expenses[idx].receiptUrl = res.fileUrl;
+          save();
+        }
+        showToast('Receipt uploaded to Drive ✓','✓','success');
+      } else {
+        showToast('Receipt upload failed: '+res.error,'!','error');
+      }
+    })
+    .catch(function(err){
+      showToast('Receipt upload error — check connection','!','error');
+      console.error('Receipt upload error:',err);
+    });
+  };
+  reader.readAsDataURL(file);
 }
 
 function updateDNote() {
@@ -690,10 +741,13 @@ function syncNow() {
   });
 }
 function saveDrive() {
-  driveFolders['Orin Global']  = document.getElementById('drive-orin').value.trim();
-  driveFolders['Aasha Setu'] = document.getElementById('drive-aasha').value.trim();
+  var orin  = document.getElementById('drive-orin').value.trim();
+  var aasha = document.getElementById('drive-aasha').value.trim();
+  if(!orin && !aasha){ showToast('Please enter at least one folder ID','!','error'); return; }
+  driveFolders['Orin Global']  = orin;
+  driveFolders['Aasha Setu']  = aasha;
   localStorage.setItem('ef6_df',JSON.stringify(driveFolders));
-  showToast('Drive folder IDs saved','✓','success');
+  showToast('Folder IDs saved — update your Apps Script too!','✓','success');
 }
 function buildCSV(data) {
   var h=['Serial No','Date','Entity','Description','Category','Amount (INR)','Paid Through','Notes','Receipt','Drive Folder','Synced'];
