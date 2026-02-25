@@ -605,13 +605,20 @@ function saveExp() {
     showToast(serial+' saved!','✓','success');
   }
 
+  // Capture file BEFORE closeModal() clears selFile
+  var fileToUpload = selFile;
+
   save(); closeModal(); populateMonths(); renderDash();
   if(curPage==='expenses') renderExpenses();
   if(curPage==='analytics') renderAnalytics();
 
-  // Upload receipt to Google Drive if a file was selected
-  if(selFile && sheetsConn) {
-    uploadReceipt(selFile, ent, serial);
+  // Upload receipt to Google Drive
+  if(fileToUpload) {
+    if(!sheetsConn) {
+      showToast('Tip: Connect Sheets to auto-upload receipts to Drive','!','error');
+    } else {
+      uploadReceipt(fileToUpload, ent, serial);
+    }
   }
 }
 
