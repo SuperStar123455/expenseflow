@@ -55,6 +55,7 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);backgr
 .etag.orin{border-color:rgba(232,201,122,.3);color:var(--accent);background:rgba(232,201,122,.05);}
 .etag.aasha{border-color:rgba(110,231,183,.3);color:var(--accent2);background:rgba(110,231,183,.05);}
 .exp-date,.exp-paid{font-size:11px;color:var(--muted);}
+.person-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;}
 .exp-notes{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic;}
 .exp-rcpt{font-size:11px;color:var(--accent2);}
 .exp-actions{display:flex;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);align-items:center;}
@@ -539,22 +540,89 @@ function renderExpenses() {
 
 function renderAnalytics() {
   var data=filtered();
+  var total=data.reduce(function(s,e){return s+e.amount;},0);
+
+  // ── Monthly ──
   var monthly={};
   data.forEach(function(e){ var m=e.date.slice(0,7); monthly[m]=(monthly[m]||0)+e.amount; });
   var maxM=Math.max.apply(null,Object.values(monthly).concat([1]));
-  var top5=[].concat(data).sort(function(a,b){return b.amount-a.amount;}).slice(0,5);
-  var monthBars=Object.entries(monthly).sort().map(function(kv){
+  var monthBars=Object.entries(monthly).sort().reverse().map(function(kv){
     var m=kv[0],v=kv[1];
     return '<div class="bar-row"><div class="bar-lbl">'+new Date(m+'-01').toLocaleString('default',{month:'short',year:'2-digit'})+'</div><div class="bar-track"><div class="bar-fill" style="width:'+((v/maxM)*100).toFixed(1)+'%;background:#e8c97a"></div></div><div class="bar-val">'+inr(v)+'</div></div>';
   }).join('') || '<div style="color:var(--muted);font-size:13px">No data</div>';
+
+  // ── Top 5 ──
+  var top5=[].concat(data).sort(function(a,b){return b.amount-a.amount;}).slice(0,5);
   var t5html=top5.map(function(e){
-    return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px"><div><div style="font-size:13px;font-weight:500">'+e.desc+'</div><div style="font-size:11px;color:var(--muted)">'+e.serial+' · '+e.entity+' · '+e.date+'</div></div><div style="font-family:Space Mono,monospace;font-size:13px;font-weight:700;white-space:nowrap">'+inr(e.amount)+'</div></div>';
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px"><div><div style="font-size:13px;font-weight:500">'+e.desc+'</div><div style="font-size:11px;color:var(--muted)">'+e.serial+' · '+(e.person||'—')+' · '+e.date+'</div></div><div style="font-family:Space Mono,monospace;font-size:13px;font-weight:700;white-space:nowrap;color:var(--accent)">'+inr(e.amount)+'</div></div>';
   }).join('') || '<div style="color:var(--muted);font-size:13px">No data</div>';
+
+  // ── Per Person ──
+  var persons=['Saurabh','Amol'];
+  var PC={'Saurabh':'#a78bfa','Amol':'#38bdf8'};
+  var personTotals={};
+  persons.forEach(function(p){ personTotals[p]=0; });
+  data.forEach(function(e){ var p=e.person||'Saurabh'; if(personTotals[p]!==undefined) personTotals[p]+=e.amount; });
+
+  // Person summary cards
+  var personCards=persons.map(function(p){
+    var amt=personTotals[p]||0;
+    var pct=total>0?((amt/total)*100).toFixed(1):0;
+    var pData=data.filter(function(e){return (e.person||'Saurabh')===p;});
+    var pCount=pData.length;
+    var pTop=pData.sort(function(a,b){return b.amount-a.amount;})[0];
+    return '<div class="person-card" style="border-color:'+PC[p]+'33">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+      +'<div style="width:32px;height:32px;border-radius:50%;background:'+PC[p]+'22;border:2px solid '+PC[p]+';display:flex;align-items:center;justify-content:center;font-size:14px">👤</div>'
+      +'<div><div style="font-weight:600;font-size:15px">'+p+'</div><div style="font-size:11px;color:var(--muted)">'+pCount+' expense'+(pCount!==1?'s':'')+'</div></div>'
+      +'<div style="margin-left:auto;text-align:right"><div style="font-family:Space Mono,monospace;font-size:16px;font-weight:700;color:'+PC[p]+'">'+inr(amt)+'</div><div style="font-size:11px;color:var(--muted)">'+pct+'% of total</div></div>'
+      +'</div>'
+      // mini progress bar
+      +'<div class="bar-track" style="height:6px;margin-bottom:10px"><div class="bar-fill" style="width:'+pct+'%;background:'+PC[p]+'"></div></div>'
+      // top expense
+      +(pTop?'<div style="font-size:11px;color:var(--muted)">Top: <strong style="color:var(--text)">'+pTop.desc+'</strong> — '+inr(pTop.amount)+'</div>':'')
+      +'</div>';
+  }).join('');
+
+  // Per person category breakdown
+  var personCatBreakdown=persons.map(function(p){
+    var pData=data.filter(function(e){return (e.person||'Saurabh')===p;});
+    if(!pData.length) return '';
+    var cats={};
+    pData.forEach(function(e){ cats[e.cat]=(cats[e.cat]||0)+e.amount; });
+    var maxC=Math.max.apply(null,Object.values(cats).concat([1]));
+    var bars=Object.entries(cats).sort(function(a,b){return b[1]-a[1];}).map(function(kv){
+      return '<div class="bar-row"><div class="bar-lbl" style="width:130px">'+kv[0].replace(' & ',' ')+'</div><div class="bar-track"><div class="bar-fill" style="width:'+((kv[1]/maxC)*100).toFixed(1)+'%;background:'+PC[p]+'"></div></div><div class="bar-val">'+inr(kv[1])+'</div></div>';
+    }).join('');
+    return '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:600;color:'+PC[p]+';margin-bottom:8px;letter-spacing:.5px">'+p.toUpperCase()+'</div>'+bars+'</div>';
+  }).join('');
+
+  // Per person monthly trend
+  var personMonthly=persons.map(function(p){
+    var pData=data.filter(function(e){return (e.person||'Saurabh')===p;});
+    if(!pData.length) return '';
+    var mon={};
+    pData.forEach(function(e){ var m=e.date.slice(0,7); mon[m]=(mon[m]||0)+e.amount; });
+    var maxV=Math.max.apply(null,Object.values(mon).concat([1]));
+    var bars=Object.entries(mon).sort().reverse().map(function(kv){
+      return '<div class="bar-row"><div class="bar-lbl">'+new Date(kv[0]+'-01').toLocaleString('default',{month:'short',year:'2-digit'})+'</div><div class="bar-track"><div class="bar-fill" style="width:'+((kv[1]/maxV)*100).toFixed(1)+'%;background:'+PC[p]+'"></div></div><div class="bar-val">'+inr(kv[1])+'</div></div>';
+    }).join('');
+    return '<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:600;color:'+PC[p]+';margin-bottom:8px;letter-spacing:.5px">'+p.toUpperCase()+'</div>'+bars+'</div>';
+  }).join('');
+
   document.getElementById('an-body').innerHTML=
-    '<div class="chart-card"><h4>Monthly Spend</h4>'+monthBars+'</div>'
+    // Person Summary
+    '<div class="chart-card"><h4>👤 By Person — Summary</h4><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="an-person-cards">'+personCards+'</div></div>'
+    // Person Category
+    +'<div class="chart-card"><h4>👤 Spend by Category per Person</h4>'+personCatBreakdown+'</div>'
+    // Person Monthly
+    +'<div class="chart-card"><h4>👤 Monthly Trend per Person</h4>'+personMonthly+'</div>'
+    // Overall
+    +'<div class="chart-card"><h4>Monthly Spend (Overall)</h4>'+monthBars+'</div>'
     +'<div class="chart-card"><h4>By Category</h4><div id="an-cat"></div></div>'
     +'<div class="chart-card"><h4>By Entity</h4><div id="an-ent"></div></div>'
     +'<div class="chart-card"><h4>Top 5 Expenses</h4>'+t5html+'</div>';
+
   renderBars('an-cat',data,'cat',CC);
   renderBars('an-ent',data,'entity',EC);
 }
