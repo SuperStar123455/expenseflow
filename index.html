@@ -316,6 +316,13 @@ body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);backgr
       </div>
     </div>
     <div class="fg"><label>Description</label><input type="text" id="m-desc" placeholder="e.g. Flight to Delhi, Office Lunch..."></div>
+    <div class="fg">
+      <label>Incurred By</label>
+      <select id="m-person">
+        <option value="Saurabh">Saurabh</option>
+        <option value="Amol">Amol</option>
+      </select>
+    </div>
     <div class="form2">
       <div class="fg"><label>Category</label>
         <select id="m-cat">
@@ -393,11 +400,11 @@ function nextSerial() {
 
 if (!expenses) {
   expenses = [
-    {id:1,serial:'SS_Exp_0001',date:'2026-02-20',entity:'Orin Global',desc:'Flight BOM to DEL',cat:'Travel & Transport',amount:8500,paid:'HDFC Corporate Card',notes:'Rabo Foundation meeting',receipt:'flight_receipt.pdf',synced:true},
-    {id:2,serial:'SS_Exp_0002',date:'2026-02-18',entity:'Aasha Setu',desc:'Team Dinner Q1 Planning',cat:'Meals & Entertainment',amount:4200,paid:'Petty Cash',notes:'',receipt:null,synced:true},
-    {id:3,serial:'SS_Exp_0003',date:'2026-02-15',entity:'Orin Global',desc:'Office Supplies Q1',cat:'Office & Supplies',amount:2350,paid:'UPI',notes:'Printer cartridges, pads',receipt:'invoice_feb.png',synced:false},
-    {id:4,serial:'SS_Exp_0004',date:'2026-02-12',entity:'Aasha Setu',desc:'Feb Office Rent',cat:'Office Rent',amount:28000,paid:'ICICI Current Account',notes:'Monthly lease',receipt:null,synced:true},
-    {id:5,serial:'SS_Exp_0005',date:'2026-02-10',entity:'Orin Global',desc:'Notion and Figma Annual',cat:'Software & Subscriptions',amount:1850,paid:'Personal Card (Reimburse)',notes:'',receipt:'stripe_receipt.png',synced:false}
+    {id:1,serial:'SS_Exp_0001',person:'Saurabh',date:'2026-02-20',entity:'Orin Global',desc:'Flight BOM to DEL',cat:'Travel & Transport',amount:8500,paid:'HDFC Corporate Card',notes:'Rabo Foundation meeting',receipt:'flight_receipt.pdf',synced:true},
+    {id:2,serial:'SS_Exp_0002',person:'Amol',date:'2026-02-18',entity:'Aasha Setu',desc:'Team Dinner Q1 Planning',cat:'Meals & Entertainment',amount:4200,paid:'Petty Cash',notes:'',receipt:null,synced:true},
+    {id:3,serial:'SS_Exp_0003',person:'Saurabh',date:'2026-02-15',entity:'Orin Global',desc:'Office Supplies Q1',cat:'Office & Supplies',amount:2350,paid:'UPI',notes:'Printer cartridges, pads',receipt:'invoice_feb.png',synced:false},
+    {id:4,serial:'SS_Exp_0004',person:'Amol',date:'2026-02-12',entity:'Aasha Setu',desc:'Feb Office Rent',cat:'Office Rent',amount:28000,paid:'ICICI Current Account',notes:'Monthly lease',receipt:null,synced:true},
+    {id:5,serial:'SS_Exp_0005',person:'Saurabh',date:'2026-02-10',entity:'Orin Global',desc:'Notion and Figma Annual',cat:'Software & Subscriptions',amount:1850,paid:'Personal Card (Reimburse)',notes:'',receipt:'stripe_receipt.png',synced:false}
   ];
   save();
 }
@@ -491,6 +498,7 @@ function expCard(e, showActions) {
     actions='<div class="exp-actions"><button class="act-btn edit" onclick="openEdit('+e.id+')">✎ Edit</button><button class="act-btn del" onclick="askDel('+e.id+')">🗑 Delete</button><span class="synced-badge" style="color:'+syncedClr+'">'+syncedTxt+'</span></div>';
   }
   var notes=e.notes?'<div class="exp-notes">'+e.notes+'</div>':'';
+  var personTag = e.person ? '<span class="tag" style="background:rgba(167,139,250,.1);color:#a78bfa;border:1px solid rgba(167,139,250,.2)">👤 '+e.person+'</span>' : '';
   var rcpt=e.receipt?(e.receiptUrl?'<a href="'+e.receiptUrl+'" target="_blank" class="exp-rcpt" style="text-decoration:none">📎 '+e.receipt+'</a>':'<span class="exp-rcpt">📎 '+e.receipt+'</span>'):'';
   var paid=e.paid?'<span class="exp-paid">💳 '+e.paid+'</span>':'';
   return '<div class="expense-card">'
@@ -498,7 +506,7 @@ function expCard(e, showActions) {
     +'<div class="exp-desc">'+e.desc+'</div>'
     +'<div class="exp-meta"><span class="badge '+(CB[e.cat]||'')+'">'+e.cat+'</span>'
     +'<span class="etag '+(e.entity==='Orin Global'?'orin':'aasha')+'">'+e.entity+'</span>'
-    +'<span class="exp-date">'+e.date+'</span>'+paid+rcpt+'</div>'
+    +'<span class="exp-date">'+e.date+'</span>'+paid+rcpt+personTag+'</div>'
     +notes+actions+'</div>';
 }
 
@@ -582,6 +590,7 @@ function openEdit(id) {
   document.getElementById('m-amount').value = e.amount;
   document.getElementById('m-paid').value   = e.paid||'';
   document.getElementById('m-notes').value  = e.notes||'';
+  document.getElementById('m-person').value = e.person||'Saurabh';
   document.getElementById('m-prev').textContent = e.receipt ? '📎 '+e.receipt : '';
   document.getElementById('m-file').value   = '';
   updateDNote();
@@ -598,22 +607,23 @@ function saveExp() {
   if(!desc)              { showToast('Please add a description','!','error'); return; }
   if(!amount||amount<=0) { showToast('Please enter a valid amount','!','error'); return; }
   if(paid && paidMethods.indexOf(paid)===-1) { paidMethods.unshift(paid); if(paidMethods.length>40)paidMethods.pop(); savePaid(); }
-  var cat   = document.getElementById('m-cat').value;
-  var ent   = document.getElementById('m-entity').value;
-  var dt    = document.getElementById('m-date').value;
-  var notes = document.getElementById('m-notes').value.trim();
+  var cat    = document.getElementById('m-cat').value;
+  var ent    = document.getElementById('m-entity').value;
+  var dt     = document.getElementById('m-date').value;
+  var notes  = document.getElementById('m-notes').value.trim();
+  var person = document.getElementById('m-person').value;
   var serial;
 
   if(editingId) {
     var i=expenses.findIndex(function(e){return e.id===editingId;});
     if(i>=0){
       serial = expenses[i].serial;
-      expenses[i]=Object.assign({},expenses[i],{date:dt,entity:ent,desc:desc,cat:cat,amount:amount,paid:paid,notes:notes,receipt:selFile?selFile.name:expenses[i].receipt,synced:false});
+      expenses[i]=Object.assign({},expenses[i],{date:dt,entity:ent,desc:desc,cat:cat,amount:amount,paid:paid,notes:notes,person:person,receipt:selFile?selFile.name:expenses[i].receipt,synced:false});
       showToast('Expense updated','✓','success');
     }
   } else {
     serial = nextSerial();
-    expenses.unshift({id:Date.now(),serial:serial,date:dt,entity:ent,desc:desc,cat:cat,amount:amount,paid:paid,notes:notes,receipt:selFile?selFile.name:null,synced:false});
+    expenses.unshift({id:Date.now(),serial:serial,date:dt,entity:ent,desc:desc,cat:cat,amount:amount,paid:paid,notes:notes,person:person,receipt:selFile?selFile.name:null,synced:false});
     showToast(serial+' saved!','✓','success');
   }
 
@@ -787,8 +797,8 @@ function saveDrive() {
   showToast('Folder IDs saved — update your Apps Script too!','✓','success');
 }
 function buildCSV(data) {
-  var h=['Serial No','Date','Entity','Description','Category','Amount (INR)','Paid Through','Notes','Receipt','Drive Folder','Synced'];
-  var r=data.map(function(e){return [e.serial,e.date,e.entity,'"'+e.desc+'"',e.cat,e.amount,'"'+(e.paid||'')+'"','"'+(e.notes||'')+'"',e.receipt||'','"ExpenseFlow / '+e.entity+'"',e.synced?'Yes':'No'];});
+  var h=['Serial No','Date','Entity','Incurred By','Description','Category','Amount (INR)','Paid Through','Notes','Receipt','Drive Folder','Synced'];
+  var r=data.map(function(e){return [e.serial,e.date,e.entity,e.person||'','"'+e.desc+'"',e.cat,e.amount,'"'+(e.paid||'')+'"','"'+(e.notes||'')+'"',e.receipt||'','"ExpenseFlow / '+e.entity+'"',e.synced?'Yes':'No'];});
   return [h].concat(r).map(function(row){return row.join(',');}).join('\n');
 }
 function exportCSV(ent) {
