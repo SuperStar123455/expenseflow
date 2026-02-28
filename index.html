@@ -823,31 +823,29 @@ function syncNow() {
   if(!sheetsConn){ showToast('Connect Sheets first','!','error'); return; }
   showToast('Syncing…','⏳','success');
   document.getElementById('sheets-txt').textContent='Syncing…';
-  fetch(sheetsUrl, {
-    method:'POST',
-    body: JSON.stringify({ expenses: expenses }),
-    headers: { 'Content-Type': 'text/plain' }
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(res){
-    if(res.success){
-      expenses = expenses.map(function(e){ return Object.assign({},e,{synced:true}); });
-      save(); renderDash();
-      if(curPage==='expenses') renderExpenses();
-      var t = new Date().toLocaleTimeString();
-      document.getElementById('sheets-txt').textContent='Synced '+res.count+' rows at '+t;
-      showToast('Synced '+res.count+' expenses to Google Sheets ✓','✓','success');
-    } else {
-      showToast('Sync failed: '+res.error,'!','error');
-      document.getElementById('sheets-txt').textContent='Sync failed — check console';
-    }
-  })
-  .catch(function(err){
-    showToast('Network error — check your URL','!','error');
-    document.getElementById('sheets-txt').textContent='Connection error';
-    console.error('Sync error:',err);
+  var persons=['Saurabh','Amol'];
+  var totalSynced=0; var pending=0;
+  persons.forEach(function(person){
+    var pExp=expenses.filter(function(e){ return (e.person||'Saurabh')===person; });
+    if(!pExp.length) return;
+    pending++;
+    fetch(sheetsUrl,{method:'POST',body:JSON.stringify({expenses:pExp,person:person}),headers:{'Content-Type':'text/plain'}})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      pending--;
+      if(res.success){ totalSynced+=res.count; } else { showToast('Sync failed for '+person+': '+res.error,'!','error'); }
+      if(pending===0){
+        expenses=expenses.map(function(e){return Object.assign({},e,{synced:true});});
+        save(); renderDash();
+        if(curPage==='expenses') renderExpenses();
+        document.getElementById('sheets-txt').textContent='Synced '+totalSynced+' rows at '+new Date().toLocaleTimeString();
+        showToast('Synced to both sheets ✓','✓','success');
+      }
+    })
+    .catch(function(){ showToast('Network error','!','error'); document.getElementById('sheets-txt').textContent='Connection error'; });
   });
 }
+
 function saveDrive() {
   var orin = document.getElementById('drive-orin').value.trim();
   if(!orin){ showToast('Please enter the folder ID','!','error'); return; }
